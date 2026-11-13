@@ -1,77 +1,79 @@
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <time.h>
-
-int main()
+ 
+#define COUNT 1000
+ 
+static double seconds(struct timespec a, struct timespec b)
 {
-    clock_t start, end;
-    start = clock();
-
-    for (int i = 0; i < 1000; i++)
-    {
-        pid_t pid = fork();
-
-        if (pid == 0)
-        {
-            _exit(0);
-        }
-        else if (pid > 0)
-        {
-            wait(NULL);
-        }
-        else
-        {
-            perror("fork failed");
-            return 1;
-        }
+    return (b.tv_sec - a.tv_sec) +
+           (b.tv_nsec - a.tv_nsec) / 1000000000.0;
+}
+ 
+int main(void)
+{
+    struct timespec start, end;
+    int created = 0;
+ 
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    for (int i = 0; i < COUNT; i++) {
+        pid_t p = fork();
+        if (p < 0) { perror("fork"); break; }
+        if (p == 0) _exit(0);
+        created++;
     }
-
-    end = clock();
-
-    printf("Created 1000 processes\n");
-    printf("CPU time: %.6f seconds\n",
-           (double)(end - start) / CLOCKS_PER_SEC);
-
+    for (int i = 0; i < created; i++)
+        wait(NULL);
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    printf("Processes created: %d\n", created);
+    printf("Process benchmark seconds: %.6f\n", seconds(start, end));
     return 0;
-Step 2 — Measure 1,000 threads
+}
 
+Thread Benchmark Program
+
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
+#include <stdlib.h>
 #include <pthread.h>
 #include <time.h>
-
-void *task(void *arg)
+ 
+#define COUNT 1000
+ 
+static void *worker(void *arg)
 {
+    (void)arg;
     return NULL;
 }
-
-int main()
+ 
+static double seconds(struct timespec a, struct timespec b)
 {
-    pthread_t threads[1000];
-    clock_t start, end;
-
-    start = clock();
-
-    for (int i = 0; i < 1000; i++)
-    {
-        if (pthread_create(&threads[i], NULL, task, NULL) != 0)
-        {
-            printf("Thread creation failed at %d\n", i);
-            return 1;
-        }
-    }
-
-    for (int i = 0; i < 1000; i++)
-    {
-        pthread_join(threads[i], NULL);
-    }
-
-    end = clock();
-
-    printf("Created 1000 threads\n");
-    printf("CPU time: %.6f seconds\n",
-           (double)(end - start) / CLOCKS_PER_SEC);
-
-    return 0;
+    return (b.tv_sec - a.tv_sec) +
+           (b.tv_nsec - a.tv_nsec) / 1000000000.0;
 }
+ 
+int main(void)
+{
+    pthread_t threads[COUNT];
+    struct timespec start, end;
+    int created = 0;
+ 
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    for (int i = 0; i < COUNT; i++) {
+        int rc = pthread_create(&threads[i], NULL, worker, NULL);
+        if (rc != 0) {
+            fprintf(stderr, "pthread_create failed at %d (code %d)\n", i, rc);
+            break;
+        }
+        created++;
+    }
+    for (int i = 0; i < created; i++)
+        pthread_join(threads[i], NULL);
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    printf("Threads created: %d\n", created);
+    printf("Thread benchmark seconds: %.6f\n", seconds(start, end));
+    return 0;
 }
